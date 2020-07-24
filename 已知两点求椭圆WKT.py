@@ -9,7 +9,7 @@ import math
 #l 长半轴长度
 def createEllipse(w):
     h=0.58*w
-    interval=w/50
+    interval=w/50.0
     xlist=[]
     ylist=[]
     for i in range(0,51):
@@ -44,7 +44,7 @@ def translationmatrix(x,y,diff_x,diff_y):
 #旋转矩阵
 def roatematrix(x,y,angle):
     x1=x*math.cos(angle)-y*math.sin(angle)
-    y1=x*math.sin(angle)-y*math.cos(angle)
+    y1=x*math.sin(angle)+y*math.cos(angle)
     return [x1,y1]
 # 计算距离
 def distince(x1,y1,x2,y2):
@@ -70,13 +70,13 @@ def azimuthAngle(x1, y1, x2, y2):
         angle = 3.0 * math.pi / 2.0 + math.atan(dy / -dx)
     return (angle * 180 / math.pi)
 if __name__ == "__main__":
-    s=[104,30]
-    e=[106,32]
+    s=[103.952342,30.697688]
+    e=[104.093855,30.669172]
     l=distince(s[0],s[1],e[0],e[1])
     angle=azimuthAngle(s[0],s[1],e[0],e[1])
-    diff_x=(s[0]+e[0])/2
-    diff_y=(s[1]+e[1])/2
-    list =createEllipse(l/2)
+    diff_x=(s[0]+e[0])/2.0
+    diff_y=(s[1]+e[1])/2.0
+    list =createEllipse(l/2.0)
     matrixed=[]
     for i in range(len(list)):
         roated=roatematrix(list[i][0],list[i][1],angle)
