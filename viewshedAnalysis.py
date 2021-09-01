@@ -200,7 +200,20 @@ def unviewshedRatio():
     
     print(sector_area)
     print(area)
-    
+#获取某个经纬度的高程
+def getElevation(dataset,lon,lat):
+    xl=dataset.RasterXSize
+    yl=dataset.RasterYSize
+    transform=dataset.GetGeoTransform()
+    minlon=transform[0]
+    minlat=transform[3]+yl*transform[5]
+    maxlon=transform[0]+xl*transform[1]
+    maxlat=transform[3]
+    deltax=math.floor((lon-minlon)/transform[1])
+    deltay=-math.ceil((maxlat-lat)/transform[5])
+    band=dataset.GetRasterBand(1)
+    elevation=band.ReadAsArray(deltax,deltay,1,1)
+    return elevation[0][0]
 if __name__ == '__main__':
     gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")  # 为了支持中文路径
     gdal.SetConfigOption("SHAPE_ENCODING", "CP936")  # 为了使属性表字段支持中文
