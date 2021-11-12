@@ -113,7 +113,7 @@ def updateStatusAndURL(_id,remark,status):
 #    
 #    cur.close()
 #    conn.close()
-def insertManyData(geotype,uid,phone,sets):
+def insertManyData(code,geotype,uid,phone,sets):
     conn = psycopg2.connect(database="commongis", user="postgres", password="postgis", host="10.110.39.222", port="5432",client_encoding='utf8')
     cur = conn.cursor()
     tiles=[]
@@ -156,13 +156,16 @@ def insertManyData(geotype,uid,phone,sets):
         elif geotype=='polygon':
             cur.execute("update t_gis_common_polygon set area=st_area(st_transform(geom, 3857)) where code='"+uid+"'")
         cur.close()
+        conn.commit()
+        conn.close()
+        updateStatusAndURL(code,u'文件解析成功',1)
     except Exception as e:
         conn.rollback()
-        print(e)
-    finally:
         cur.close()
         conn.commit()
         conn.close()
+        updateStatusAndURL(code,u'数据异常,解析失败',2)
+        print(e)
 #插入短信
 def inertInfo(phone,content):
     conn = pymssql.connect("10.110.39.193", "sa", "SCGX_2018", "Data_Center",charset='utf8')
@@ -203,8 +206,8 @@ def readShp(row):
             
             sets.append((text,row[2],remark,wkt))
             feature = layer.GetNextFeature()
-        insertManyData(row[1],row[2],row[5],sets)
-        updateStatusAndURL(row[0],u'文件解析成功',1)
+        insertManyData(row[0],row[1],row[2],row[5],sets)
+        #updateStatusAndURL(row[0],u'文件解析成功',1)
     else:
         updateStatusAndURL(row[0],u'字段缺失',2)
         print(u'字段缺失！')
@@ -238,8 +241,8 @@ def readTAB(row):
             
             sets.append((text,row[2],remark,wkt))
             feature = layer.GetNextFeature()
-        insertManyData(row[1],row[2],row[5],sets)
-        updateStatusAndURL(row[0],u'文件解析成功',1)
+        insertManyData(row[0],row[1],row[2],row[5],sets)
+        #updateStatusAndURL(row[0],u'文件解析成功',1)
     else:
         updateStatusAndURL(row[0],u'字段缺失',2)
         print(u'字段缺失！')
@@ -275,8 +278,8 @@ def readKML(row):
                 
                 sets.append((text,row[2],remark,wkt))
                 feature = layeritem.GetNextFeature()
-        insertManyData(row[1],row[2],row[5],sets)
-        updateStatusAndURL(row[0],u'文件解析成功',1)
+        insertManyData(row[0],row[1],row[2],row[5],sets)
+        #updateStatusAndURL(row[0],u'文件解析成功',1)
     else:
         updateStatusAndURL(row[0],u'字段缺失',2)
         print(u'字段缺失！')
@@ -323,14 +326,15 @@ def readCSV(row):
             if remark!=None:
                 remark=remark.decode('gbk').encode('utf-8')
             sets.append((text,row[2],remark,wkt))
-        insertManyData(row[1],row[2],row[5],sets)
-        updateStatusAndURL(row[0],u'文件解析成功',1)
+        insertManyData(row[0],row[1],row[2],row[5],sets)
+        #updateStatusAndURL(row[0],u'文件解析成功',1)
     else:
         updateStatusAndURL(row[0],u'字段缺失',2)
         print(u'字段缺失！')
 #读取excel文件
 def readExcel(row):
     filepath = base_path+row[3].replace('/','\\').encode('gbk')
+    print(filepath)
     book = xlrd.open_workbook(filepath)
     data = book.sheets()[0]
     if data.nrows<1:
@@ -370,8 +374,8 @@ def readExcel(row):
             if remark!=None:
                 remark=remark
             sets.append((text,row[2],remark,wkt))
-        insertManyData(row[1],row[2],row[5],sets)
-        updateStatusAndURL(row[0],u'文件解析成功',1)
+        insertManyData(row[0],row[1],row[2],row[5],sets)
+        #updateStatusAndURL(row[0],u'文件解析成功',1)
     else:
         updateStatusAndURL(row[0],u'字段缺失',2)
         print(u'字段缺失！')
