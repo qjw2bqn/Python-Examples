@@ -76,10 +76,10 @@ def getPGTableData(sql):
     conn.close()
     return recordRows
 #插入下载的url
-def updateStatusAndURL(_id,url):
+def updateStatusAndURL(_id,status,url):
     conn = pymssql.connect("10.110.39.193", "sa", "SCGX_2018", "Data_Center",charset='utf8')
     cur = conn.cursor()
-    cur.execute(u"update t_gis_download_manage set status=2,url='"+url+"' where id="+str(_id))
+    cur.execute(u"update t_gis_download_manage set status="+str(status)+",url='"+url+"' where id="+str(_id))
     conn.commit()
     cur.close()
     conn.close()
@@ -107,7 +107,7 @@ def createSQL(table,city,county,branch):
             branch='1=1'
         else:
             branch="branch_name='"+branch+"'"
-        sql=u"select 新物业唯一 as code,地市 as city,区县 as county,branch_name as branch,新物业名 as name,address,type,面积 as area,中心经度 as lon,中心纬度 as lat,build_num,is_2772,code_2772,is_park,park_num,wkt from t_gis_juminqu_manage where status =1 and "+city+" and "+county+" and "+branch+";"                                           
+        sql=u"select 新物业唯一 as code,地市 as city,区县 as county,branch_name as branch,新物业名 as name,address,type,面积 as area,中心经度 as lon,中心纬度 as lat,build_num,is_2772,code_2772,is_park,park_num,operatetime,wkt from t_gis_juminqu_manage where status =1 and "+city+" and "+county+" and "+branch+";"                                           
     if table=='2':
         if city=='' or city==None:
             city='1=1'
@@ -149,7 +149,7 @@ def createSQL(table,city,county,branch):
             branch='1=1'
         else:
             branch="branches_name='"+branch+"'"
-        sql='select gridId,city,county,grid_name,company_name,branches_name,wkt from t_gis_grid where '+city+' and '+county+' and '+branch+';' 
+        sql='select gridId,city,county,branches_name,grid_name,company_name,wkt from t_gis_grid where '+city+' and '+county+' and '+branch+';' 
     if table=='5':
         if city=='' or city==None:
             city='1=1'
@@ -236,11 +236,26 @@ def createSQL(table,city,county,branch):
         else:
             city="city='"+city+"'"
         sql='select city,name,area,Shape.STAsText() as wkt from T_GIS_TOWNSHIP_MANAGE where '+city
+    if table=='14':
+        if city=='' or city==None:
+            city='1=1'
+        else:
+            city="b.city='"+city+"'"
+        if county=='' or county==None:
+            county='1=1'
+        else:
+            county="b.county='"+county+"'"
+        if branch=='' or branch==None:
+            branch='1=1'
+        else:
+            branch="b.branches_name='"+branch+"'"
+        sql='select  b.city,b.county,b.branches_name,a.total_score,b.wkt from report_microregion_custom_score_grid_w a left join t_gis_grid b on a.wqy_id=b.gridId where a.time=(select max(time) from report_microregion_custom_score_grid_w) and '+city+' and '+county+' and '+branch+';' 
     return sql
 #获取未解析的下载请求
 def getUnResolving():
     rows=getTableData('select id,table_name,city,county,branch,create_person from t_gis_download_manage where status=1;')
     for row in rows:
+        updateStatusAndURL(row[0],3,'')
         writeToTAB(row[0],row[1],row[2],row[3],row[4],row[5])
     gc.collect()
     exit()
@@ -337,9 +352,14 @@ fields01=[{
     'field_length':20
 },{
     'name':'park_num',
-    'label':u'停车场数据量',
+    'label':u'停车场数量',
     'field_type':'i',
     'field_length':0
+},{
+    'name':'operatetime',
+    'label':u'更新时间',
+    'field_type':'d',
+    'field_length':20
 }]
     
 fields02=[{
@@ -428,7 +448,7 @@ fields03=[{
     'name':'code',
     'label':u'自然村编码',
     'field_type':'s',
-    'field_length':50
+    'field_length':100
 },{
     'name':'city',
     'label':u'地市',
@@ -646,21 +666,19 @@ def extentByWKT(wkt):
         elif wkt.find("MULTIPOLYGON(((")>-1:
             wkt=wkt.replace("MULTIPOLYGON(((","").replace(", ",",").replace(")))","").split(')),((')[0]
         elif wkt.find("POLYGON ((")>-1:
-            wkt=wkt.replace("POLYGON ((","").replace(", ",",").replace("))","")
+            wkt=wkt.replace(") ,(","),(").replace("), (","),(").split('),(')[0].replace("POLYGON ((","").replace(", ",",").replace("))","")
         elif wkt.find("POLYGON((")>-1:
-            wkt=wkt.replace("POLYGON((","").replace(", ",",").replace("))","")
+            wkt=wkt.replace(") ,(","),(").replace("), (","),(").split('),(')[0].replace("POLYGON((","").replace(", ",",").replace("))","")
         points=wkt.split(',')
-
         xarray=[]
         yarray=[]
         for index in range(len(points)):
             point=points[index].split(' ')
             xarray.append(float(point[0]))
             yarray.append(float(point[1]))
-        
         return [min(xarray),min(yarray),max(xarray),max(yarray)]
     except Exception as err:
-        return [78.393604-1,99.109761+1,26.8529-1,36.485277+1]
+        return [97,26,108,34]
 def millerToXY(lon,lat):
     x =  lon*20037508.342789/180
     
@@ -681,7 +699,7 @@ def createPatches(map,wkt):
     patches= []
     path=[]
     for index in range(len(points)):
-        point=points[index].split(' ')
+        point=points[index].replace(")","").replace("(","").split(' ')
         p=[]
         coordinates=map(float(point[0]), float(point[1]))
         p.append(coordinates[0])
@@ -755,8 +773,6 @@ def drawMap(id,table,foldername,filename,city,county,branch,phone):
     if _width<2000 or _height<2000:
         _width=_width*2
         _height=_height*2
-    
-    
     _extent=[minxy[0],minxy[1],maxxy[0],maxxy[1]]
     zoom=calcLevel(_extent,_width,_height)
     top_left_row_col=xyzToRowCol(_extent[0],_extent[3],zoom)
@@ -804,13 +820,13 @@ def drawMap(id,table,foldername,filename,city,county,branch,phone):
             _facecolor='#0042AB'
         elif recordRow[1]==3:
             _facecolor='#B21702'
-        #patchcollection=PatchCollection(patches, facecolor=_facecolor, edgecolor='#FFFFFF', linewidths=1, zorder=2,alpha=0.5)
-        patchcollection=PatchCollection(patches, facecolor=((0,0,0,0),), edgecolor='#B21702', linewidths=1, zorder=2)
+        patchcollection=PatchCollection(patches, facecolor=_facecolor, edgecolor='#FFFFFF', linewidths=1, zorder=2,alpha=0.5)
+        #patchcollection=PatchCollection(patches, facecolor=((0,0,0,0),), edgecolor='#B21702', linewidths=1, zorder=2)
         ax.add_collection(patchcollection)
         if table=='7' or table=='8':
             _p=map((extent[0]+extent[2])/2,(extent[1]+extent[3])/2)
-            #plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#FFFFFF',ha='center')
-            plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#B21702',ha='center')
+            plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#FFFFFF',ha='center')
+            #plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#B21702',ha='center')
     plt.axis('off')
     path=base_path+foldername
     newfile=path+'\\'+filename
@@ -852,18 +868,18 @@ def drawMap(id,table,foldername,filename,city,county,branch,phone):
             _facecolor='#0042AB'
         elif recordRow[1]==3:
             _facecolor='#B21702'
-        #patchcollection=PatchCollection(patches, facecolor=_facecolor, edgecolor='#FFFFFF', linewidths=1, zorder=2,alpha=0.5)
-        patchcollection=PatchCollection(patches, facecolor=((0,0,0,0),), edgecolor='#B21702', linewidths=1, zorder=2)
+        patchcollection=PatchCollection(patches, facecolor=_facecolor, edgecolor='#FFFFFF', linewidths=1, zorder=2,alpha=0.5)
+        #patchcollection=PatchCollection(patches, facecolor=((0,0,0,0),), edgecolor='#B21702', linewidths=1, zorder=2)
         _ax.add_collection(patchcollection)
         if table=='7' or table=='8':
             _p=_map((extent[0]+extent[2])/2,(extent[1]+extent[3])/2)
-            #plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#FFFFFF',ha='center')
-            plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#B21702',ha='center')
+            plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#FFFFFF',ha='center')
+            #plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#B21702',ha='center')
     plt.axis('off')
     plt.savefig(newfile+'_image.png')
     #----------------------------------------------------------------------------------------------------------------------------------
     zipDir(path,base_path+foldername+'.zip','')
-    updateStatusAndURL(id,download_path+foldername+'.zip')
+    updateStatusAndURL(id,2,download_path+foldername+'.zip')
     inertInfo(phone,filename+'已经导出完成！')
     logging.info(filename+u'导出完成')
     gc.collect()
@@ -872,15 +888,16 @@ def drawMap(id,table,foldername,filename,city,county,branch,phone):
 #绘制百度地图
 def drawBaiduMap(id,table,foldername,filename,city,county,branch,phone):
     recordRows = []
+    col_index=4
     if table=='14':
-        sql = createSQL('4',city,county,branch)
-        recordRows=getTableData(sql.encode('utf-8'))
+        col_index=4
     else:
-        sql = createSQL(table,city,county,branch)
-        recordRows = getTableData(sql.encode('utf-8'))
+        col_index=6
+    sql = createSQL(table,city,county,branch)
+    recordRows = getTableData(sql.encode('utf-8'))
     maxextent = [180, 180,0, 0]
     for recordRow in recordRows:
-        extent=extentByWKT(recordRow[6])
+        extent=extentByWKT(recordRow[col_index])
         if maxextent[0] > extent[0]:
             maxextent[0] = extent[0]
         if maxextent[1] > extent[1]:
@@ -956,26 +973,35 @@ def drawBaiduMap(id,table,foldername,filename,city,county,branch,phone):
     x1, y1 = _map(_urcrnrlon, _urcrnrlat)
     plt.imshow(resultImage,  extent = (x0, x1, y0, y1))
     for recordRow in recordRows:
-        wkt=''
-        if table=='14':
-            wkt=recordRow[6]
+        wkt=recordRow[col_index]
         if wkt=='':
             continue
         extent=extentByWKT(wkt)
         patches=createPatches(_map,wkt)
         _facecolor='#069F08'
-        patchcollection=PatchCollection(patches, facecolor=((0,0,0,0),), edgecolor='#E50B00', linewidths=2, zorder=2)
+        if table=='14':
+            if recordRow[3]<60:
+                _facecolor='#FF0610'
+            elif recordRow[3]>=60 and recordRow[3]<70:
+                _facecolor='#FFA210'
+            elif recordRow[3]>=70 and recordRow[3]<80:
+                _facecolor='#FEFF12'
+            elif recordRow[3]>=80 and recordRow[3]<90:
+                _facecolor='#8CFF11'
+            elif recordRow[3]>90:
+                _facecolor='#15FF12'
+        patchcollection=PatchCollection(patches, facecolor=_facecolor, edgecolor='#FFFFFF', linewidths=2, zorder=2,alpha=0.5)
         _ax.add_collection(patchcollection)
         if table=='14':
             _p=_map((extent[0]+extent[2])/2,(extent[1]+extent[3])/2)
-            plt.text(_p[0],_p[1], recordRow[3].decode("utf-8"),fontsize=10,color='#E50B00',ha='center')
+            plt.text(_p[0],_p[1], recordRow[2].decode("utf-8"),fontsize=10,color='#FFFFFF',ha='center')
     plt.axis('off')
     path=base_path+foldername
     newfile=path+'\\'+filename
     plt.savefig(newfile+'.png')
     #----------------------------------------------------------------------------------------------------------------------------------
     zipDir(path,base_path+foldername+'.zip','')
-    updateStatusAndURL(id,download_path+foldername+'.zip')
+    updateStatusAndURL(id,2,download_path+foldername+'.zip')
     inertInfo(phone,filename+'已经导出完成！')
     logging.info(filename+u'导出完成')
     gc.collect()
@@ -1031,6 +1057,9 @@ def writeToTAB(id,table,city,county,branch,phone):
     if table=='8':
         drawMap(id,table,foldername,filename,city,county,branch,phone)
         return
+    if table=='9':
+        drawMap(id,table,foldername,filename,city,county,branch,phone)
+        return
     if table=='14':
         drawBaiduMap(id,table,foldername,filename,city,county,branch,phone)
         return
@@ -1059,21 +1088,51 @@ def writeToTAB(id,table,city,county,branch,phone):
         _area = ogr.FieldDefn(str(u"面积").encode('gbk'), ogr.OFTReal)
         oLayer.CreateField(_area, 1)
     else:
-        if os.path.exists(newfile+'.TAB')==False:
-            shutil.copyfile(template_path+tablelabel+'.TAB',newfile+'.TAB')
-            shutil.copyfile(template_path+tablelabel+'.DAT',newfile+'.DAT')
-            shutil.copyfile(template_path+tablelabel+'.MAP',newfile+'.MAP')
-            shutil.copyfile(template_path+tablelabel+'.ID',newfile+'.ID')
-        time.sleep(1)
-        ds = ogr.Open(newfile+'.TAB',True) #False - read only, True - read/write
-        oLayer = ds.GetLayer(0)
+#        if os.path.exists(newfile+'.TAB')==False:
+#            shutil.copyfile(template_path+tablelabel+'.TAB',newfile+'.TAB')
+#            shutil.copyfile(template_path+tablelabel+'.DAT',newfile+'.DAT')
+#            shutil.copyfile(template_path+tablelabel+'.MAP',newfile+'.MAP')
+#            shutil.copyfile(template_path+tablelabel+'.ID',newfile+'.ID')
+#        time.sleep(1)
+        
+        strDriverName = "MapInfo File"
+        strVectorFile = newfile+'.TAB'
+        oDriver = ogr.GetDriverByName(strDriverName)
+        if oDriver == None:
+            print("%s 驱动不可用！\n", strDriverName)
+        ds = oDriver.CreateDataSource(strVectorFile)  # 创建数据源
+        if ds == None:
+            print("创建文件【%s】失败！", strVectorFile)
+        srs = osr.SpatialReference()  # 创建空间参考
+        srs.ImportFromEPSG(4326)  # 定义地理坐标系WGS1984
+        oLayer = ds.CreateLayer("Polygon", srs, ogr.wkbPolygon, [])
+        if oLayer == None:
+            print("图层创建失败！\n")
+        fields=getFields(table)
+        for i in range(len(fields)):
+            if fields[i]['field_type']=='s':
+                field = ogr.FieldDefn(str(fields[i]['label']).encode('gbk'), ogr.OFTString)
+                field.SetWidth(fields[i]['field_length'])
+                oLayer.CreateField(field, 1)
+            elif fields[i]['field_type']=='f':
+                field = ogr.FieldDefn(str(fields[i]['label']).encode('gbk'), ogr.OFTReal)
+                oLayer.CreateField(field, 1)
+            elif fields[i]['field_type']=='d':
+                field = ogr.FieldDefn(str(fields[i]['label']).encode('gbk'), ogr.OFTDateTime)
+                oLayer.CreateField(field, 1)
+            else:
+                field = ogr.FieldDefn(str(fields[i]['label']).encode('gbk'), ogr.OFTString)
+                field.SetWidth(fields[i]['field_length'])
+                oLayer.CreateField(field, 1)
+        
+        #ds = ogr.Open(newfile+'.TAB',True) #False - read only, True - read/write
+        #oLayer = ds.GetLayer(0)
     oDefn = oLayer.GetLayerDefn()  # 定义要素
     
     #ogr.RegisterAll()  # 注册所有的驱动
     #gdal.SetConfigOption("GDAL_FILENAME_IS_UTF8", "NO")  # 为了支持中文路径
     #gdal.SetConfigOption("SHAPE_ENCODING", "")
     
-
     sql = createSQL(table,city,county,branch)
     recordRows = getTableData(sql)
     for recordRow in recordRows:
@@ -1093,6 +1152,11 @@ def writeToTAB(id,table,city,county,branch,phone):
                     feature.SetField(i, float(recordRow[i]))
                 else:
                     feature.SetField(i, recordRow[i])
+            elif fields[i]['field_type']=='d':
+                if recordRow[i]!=None:
+                    feature.SetField(i, str(recordRow[i]))
+                else:
+                    feature.SetField(i, recordRow[i])
             else:
                 if recordRow[i]!=None:
                     feature.SetField(i, int(recordRow[i]))
@@ -1108,7 +1172,7 @@ def writeToTAB(id,table,city,county,branch,phone):
     oLayer=None
     oDefn=None
     zipDir(path,base_path+foldername+'.zip','')
-    updateStatusAndURL(id,download_path+foldername+'.zip')
+    updateStatusAndURL(id,2,download_path+foldername+'.zip')
     inertInfo(phone,filename+'已经导出完成！')
     logging.info(filename+u'导出完成')
     
